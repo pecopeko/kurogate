@@ -1,0 +1,120 @@
+:root {
+  --bg: #e2e2e2;
+  --surface: #d6d6d6;
+  --ink: #7d0c14;
+  --muted: #613538;
+  --accent: #7d0c14;
+  --accent-ink: #e2e2e2;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 380px;
+  margin: 0;
+  padding: 14px;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.kg-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.kg-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kg-bar {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  background: var(--ink);
+}
+
+.kg-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.kg-pill {
+  padding: 2px 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.kg-main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.kg-page-bar,
+.kg-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.kg-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.kg-field > span {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--ink);
+  background: #ececec;
+  color: #1f1415;
+  font: inherit;
+  resize: vertical;
+}
+
+.kg-btn {
+  flex: 1;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.kg-btn-primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.kg-btn-ghost {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.kg-dict {
+  padding: 8px;
+  background: var(--surface);
+}
+
+.kg-dict summary {
+  cursor: pointer;
+  font-weight: 600;
+}

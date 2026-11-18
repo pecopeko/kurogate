@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KUROGATE（黒門）</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="kg-head">
+    <div class="kg-brand">
+      <span class="kg-bar" aria-hidden="true"></span>
+      <strong>KUROGATE</strong>
+      <span class="kg-sub">黒門 · 0-Network Local</span>
+    </div>
+    <span class="kg-pill" id="statusBadge">待機中</span>
+  </header>
+
+  <main class="kg-main">
+    <section class="kg-page-bar">
+      <button type="button" id="redactPageBtn" class="kg-btn kg-btn-primary">アクティブ欄を黒塗り</button>
+      <button type="button" id="restorePageBtn" class="kg-btn kg-btn-ghost">ページ復元</button>
+    </section>
+
+    <label class="kg-field">
+      <span>入力テキスト / LLM応答</span>
+      <textarea id="inputText" rows="5" placeholder="請求書番号（T+13桁）、法人番号、マイナンバー、口座、社内固有名詞を入力…"></textarea>
+    </label>
+
+    <div class="kg-actions">
+      <button type="button" id="redactBtn" class="kg-btn kg-btn-primary">ローカル黒塗り</button>
+      <button type="button" id="restoreBtn" class="kg-btn kg-btn-ghost">Vault復元</button>
+      <button type="button" id="copyBtn" class="kg-btn kg-btn-ghost">結果をコピー</button>
+    </div>
+
+    <label class="kg-field">
+      <span>出力結果</span>
+      <textarea id="outputText" rows="5" readonly></textarea>
+    </label>
+
+    <details class="kg-dict">
+      <summary>社内辞書・Vault管理（<span id="vaultCount">0</span>件保存中）</summary>
+      <label class="kg-field">
+        <span>社内固有名詞（1行1語・ローカル保存）</span>
+        <textarea id="dictInput" rows="3" placeholder="株式会社黒門精密&#10;Project-Hayabusa"></textarea>
+      </label>
+      <div class="kg-actions">
+        <button type="button" id="saveDictBtn" class="kg-btn kg-btn-ghost">辞書を保存</button>
+        <button type="button" id="clearVaultBtn" class="kg-btn kg-btn-ghost">Vault消去</button>
+      </div>
+    </details>
+  </main>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

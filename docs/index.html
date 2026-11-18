@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KUROGATE（黒門）: Browser-Local Japanese LLM PII Redactor &amp; Vault</title>
+  <meta name="description" content="100% browser-local Japanese PII check-digit redactor, custom enterprise dictionary masker, reversible vault, and Manifest V3 Chrome extension with zero network transmission.">
+  <meta name="theme-color" content="#7d0c14">
+  <script>document.documentElement.classList.add('js');</script>
+  <link rel="stylesheet" href="./assets/fonts/fonts.css">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+  <!-- HERO: Printed redaction document card beside sticky archival ledger plate -->
+  <header class="hero">
+    <div class="hero__card">
+      <div class="redaction-stripe" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+
+      <div class="hero__inner">
+        <div class="wordmark">
+          <span class="wordmark__bar" aria-hidden="true"></span>
+          <span>KUROGATE 黒門</span>
+        </div>
+
+        <div class="hero__center">
+          <h1 class="hero__title lines">
+            <span class="line"><span data-line style="--i:0">Redact PII</span></span>
+            <span class="line"><span data-line style="--i:1">at the gate</span></span>
+          </h1>
+          <p class="hero__lead" data-load style="--d:220ms">
+            Verify NTA corporate numbers and MyNumber check digits locally, mask sensitive spans into reversible slips, and transmit zero bytes anywhere.
+          </p>
+          <div class="hero__actions" data-load style="--d:300ms">
+            <a class="btn" href="#workbench">Open workbench</a>
+            <a class="text-link" href="#extension">Chrome extension v1.0.0</a>
+          </div>
+        </div>
+
+        <nav class="hero__nav" aria-label="Primary sections">
+          <a href="#workbench">Workbench</a>
+          <a href="#pipeline">Pipeline</a>
+          <a href="#rules">Rules</a>
+          <a href="#extension">Extension</a>
+        </nav>
+      </div>
+    </div>
+
+    <figure class="hero__stage">
+      <div class="hero__crossfade" id="heroCrossfade">
+        <img class="plate-media is-active" src="./assets/account-title-stamp-2025-04-22.jpg" width="1920" height="1440" fetchpriority="high" decoding="async" alt="Japanese accounting classification rubber stamps stacked beside an inked ledger impression">
+        <img class="plate-media" src="./assets/sealing-stamp-2025-04-08.jpg" width="1920" height="1080" decoding="async" alt="Kraft paper envelope sealed across the flap with a Japanese black ink sealing stamp">
+        <img class="plate-media" src="./assets/express-mail-stamp-in-japan-2025-05.jpg" width="1920" height="1080" decoding="async" alt="Japanese postal envelope bearing an express stamp and seven-digit postal code grid">
+      </div>
+      <figcaption class="hero__plate-caption">
+        <span>Japanese office stamps &amp; sealing records</span>
+        <span id="networkAuditStatus">External runtime calls: 0</span>
+      </figcaption>
+    </figure>
+  </header>
+
+  <main>
+    <!-- SECTION 1: SHOWCASE : Live Interactive Workbench -->
+    <section class="section wrap" id="workbench" aria-labelledby="heading-workbench">
+      <div class="section-head">
+        <h2 id="heading-workbench" data-reveal>Live redactor workbench</h2>
+        <p data-reveal style="--stagger:70ms">Paste invoices, MyNumber, bank accounts, or TSV ledgers. Every mask and check digit computes inside this tab with zero network calls.</p>
+      </div>
+
+      <div class="workbench-shell" data-reveal style="--stagger:120ms">
+        <div class="wb-frame">
+          <div class="wb-topbar" data-ui="toolbar">
+            <div class="wb-tabs" role="tablist" aria-label="Workbench mode">
+              <button type="button" class="wb-tab" id="tabTextMode" role="tab" aria-selected="true">Text &amp; Prompts</button>
+              <button type="button" class="wb-tab" id="tabBatchMode" role="tab" aria-selected="false">CSV / TSV Batch</button>
+              <button type="button" class="wb-tab" id="tabDictMode" role="tab" aria-selected="false">Enterprise Dictionary</button>
+            </div>
+            <div class="wb-telemetry" id="wbTelemetry">0 external requests · Offline engine ready</div>
+          </div>
+
+          <div class="wb-grid" id="wbMainGrid">
+            <div class="wb-pane" data-ui="input-pane">
+              <div class="wb-pane-head">
+                <span class="wb-pane-title" id="inputPaneTitle">Raw Japanese Input</span>
+                <div class="wb-samples">
+                  <button type="button" class="wb-chip" data-sample="invoice">Invoice &amp; Bank</button>
+                  <button type="button" class="wb-chip" data-sample="mynumber">MyNumber &amp; Card</button>
+                  <button type="button" class="wb-chip" data-sample="injection">Injection Trap</button>
+                  <button type="button" class="wb-chip" data-sample="tsv">TSV Ledger</button>
+                </div>
+              </div>
+
+              <div class="wb-batch-cols wb-hidden" id="batchColumnsBar">
+                <span class="wb-pane-title">Target Columns:</span>
+                <div id="batchColumnsList" class="wb-samples"></div>
+              </div>
+
+              <textarea id="wbInput" class="wb-textarea" aria-label="Raw text or delimited input" spellcheck="false"></textarea>
+
+              <div class="wb-controls">
+                <label class="wb-toggle">
+                  <input type="checkbox" id="optNormalize" checked>
+                  <span>Normalize JP width &amp; tildes (NFKC)</span>
+                </label>
+                <div class="wb-btn-row">
+                  <button type="button" class="wb-btn" id="btnNormalizeOnly">Normalize text</button>
+                  <button type="button" class="wb-btn wb-btn--primary" id="btnRedact">Redact locally</button>
+                </div>
+              </div>
+
+              <div class="wb-stats" aria-live="polite">
+                <div class="wb-stat">
+                  <span class="wb-stat-label">Masked spans</span>
+                  <span class="wb-stat-val" id="statMasked">0</span>
+                </div>
+                <div class="wb-stat">
+                  <span class="wb-stat-label">Check-digit verified</span>
+                  <span class="wb-stat-val wb-stat-val--ok" id="statVerified">0</span>
+                </div>
+                <div class="wb-stat">
+                  <span class="wb-stat-label">Vault tokens</span>
+                  <span class="wb-stat-val" id="statTokens">0</span>
+                </div>
+                <div class="wb-stat">
+                  <span class="wb-stat-label">Injection risk</span>
+                  <span class="wb-stat-val" id="statRisk">0.00</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="wb-pane" data-ui="output-pane">
+              <div class="wb-pane-head">
+                <span class="wb-pane-title">Sanitized Output &amp; Vault</span>
+                <div class="wb-samples" role="tablist" aria-label="Output view">
+                  <button type="button" class="wb-chip" id="viewSanitizedBtn" aria-pressed="true">Redacted</button>
+                  <button type="button" class="wb-chip" id="viewRestoreBtn" aria-pressed="false">Restore Reply</button>
+                  <button type="button" class="wb-chip" id="viewVaultBtn" aria-pressed="false">Vault Table</button>
+                </div>
+              </div>
+
+              <div id="panelSanitized">
+                <div id="wbSanitizedPreview" class="wb-output-preview" aria-live="polite"></div>
+                <div class="wb-controls" style="margin-top:0.75rem;">
+                  <div class="wb-btn-row">
+                    <button type="button" class="wb-btn wb-btn--primary" id="btnCopyRedacted">Copy sanitized text</button>
+                    <button type="button" class="wb-btn" id="btnSimLlm">Test round-trip restore</button>
+                  </div>
+                  <div class="wb-btn-row">
+                    <button type="button" class="wb-btn" id="btnAuditJson">ISMS JSON</button>
+                    <button type="button" class="wb-btn" id="btnAuditMd">Audit Markdown</button>
+                  </div>
+                </div>
+              </div>
+
+              <div id="panelRestore" class="wb-hidden">
+                <textarea id="wbRestoreInput" class="wb-textarea" aria-label="Paste LLM response with tokens to restore" placeholder="Paste AI response containing [INVOICE_ID_1], [MYNUMBER_1], [CUSTOM_TERM_1]…"></textarea>
+                <div class="wb-controls" style="margin-top:0.65rem;">
+                  <button type="button" class="wb-btn wb-btn--primary" id="btnRunRestore">Restore original values</button>
+                  <button type="button" class="wb-btn" id="btnCopyRestored">Copy restored output</button>
+                </div>
+              </div>
+
+              <div id="panelVault" class="wb-hidden">
+                <div class="wb-table-wrap">
+                  <table class="wb-table">
+                    <thead>
+                      <tr>
+                        <th>Token</th>
+                        <th>Rule</th>
+                        <th class="num">Chars</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody id="wbVaultRows"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="wb-pane wb-hidden" id="wbDictPane" data-ui="dict-pane">
+            <div class="wb-pane-head">
+              <span class="wb-pane-title">Custom Enterprise Dictionary（社内固有名詞・取引先・案件名 : saved in localStorage）</span>
+              <button type="button" class="wb-btn" id="btnResetDict">Restore defaults</button>
+            </div>
+            <div class="wb-dict-row">
+              <input type="text" id="dictNewTerm" class="wb-input" placeholder="Add company, client, or project codename (e.g. 株式会社黒門精密, Project-Hayabusa)" aria-label="Custom term to redact">
+              <button type="button" class="wb-btn wb-btn--primary" id="btnAddDict">Add term</button>
+            </div>
+            <div id="dictTags" class="wb-dict-tags"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 2: HOW IT WORKS : Stages as one bar -->
+    <section class="section pipeline-section" id="pipeline" aria-labelledby="heading-pipeline">
+      <div class="wrap">
+        <h2 id="heading-pipeline" data-reveal>Verify before leaving</h2>
+
+        <div class="pipeline-bar-wrap" data-reveal style="--stagger:90ms">
+          <div class="pipeline-bar" data-ui="pipeline">
+            <div class="pipeline-seg" style="flex-grow:18;">
+              <span class="pipeline-seg__time">1-to-1 Map</span>
+              <span class="pipeline-seg__share">18% · Zero drift</span>
+            </div>
+            <div class="pipeline-seg pipeline-seg--surface" style="flex-grow:34;">
+              <span class="pipeline-seg__time">Check Digits</span>
+              <span class="pipeline-seg__share">34% · Mod-9 / Mod-11 / Luhn</span>
+            </div>
+            <div class="pipeline-seg pipeline-seg--deep" style="flex-grow:24;">
+              <span class="pipeline-seg__time">Injection Screen</span>
+              <span class="pipeline-seg__share">24% · 8 EN/JA rules</span>
+            </div>
+            <div class="pipeline-seg pipeline-seg--dark" style="flex-grow:24;">
+              <span class="pipeline-seg__time">Vault Swap</span>
+              <span class="pipeline-seg__share">24% · Local restore</span>
+            </div>
+          </div>
+
+          <div class="pipeline-captions">
+            <div class="pipeline-cap" style="flex-grow:18;">
+              <p>First, full-width characters map 1-to-1 to preserve exact UTF-16 spans.</p>
+            </div>
+            <div class="pipeline-cap" style="flex-grow:34;">
+              <p>Second, NTA Mod-9, MIC Mod-11, and Luhn eliminate order-number false alarms.</p>
+            </div>
+            <div class="pipeline-cap" style="flex-grow:24;">
+              <p>Third, multilingual override phrases and hidden zero-width controls are scored.</p>
+            </div>
+            <div class="pipeline-cap" style="flex-grow:24;">
+              <p>Fourth, deterministic slips mask prompts now and restore replies later.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 3: FEATURES : Close-ups on a board (12-column mosaic) -->
+    <section class="section wrap" id="features" aria-labelledby="heading-features">
+      <div class="mosaic-grid">
+        <div class="mosaic-tile mosaic-tile--6x2 mosaic-tile--head" data-reveal>
+          <h2 id="heading-features">Built for Japanese text</h2>
+          <p>Mixed full-width invoices, accounting stamps, and tabular ledgers stay exact.</p>
+        </div>
+
+        <figure class="mosaic-tile mosaic-tile--6x4" data-reveal style="--stagger:70ms">
+          <div class="mosaic-tile__media">
+            <img class="plate-media" src="./assets/date-stamp-2025-04-17.jpg" width="1792" height="1792" loading="lazy" decoding="async" alt="Japanese rotary rubber date stamp showing inked numerals 24.10.23 on paper">
+          </div>
+          <figcaption class="mosaic-tile__caption">
+            <strong>Modulo check-digit stamps</strong>
+            <span>Invalid 12- and 13-digit serials pass untouched while verified IDs seal cleanly.</span>
+          </figcaption>
+        </figure>
+
+        <div class="mosaic-tile mosaic-tile--4x2" data-reveal style="--stagger:140ms">
+          <div class="mosaic-macro" data-ui="macro-token">
+            <span class="mosaic-macro-slip">[INVOICE_ID_1]</span>
+          </div>
+          <div class="mosaic-tile__caption">
+            <strong>Reversible slip tokens</strong>
+            <span>Same corporate entity keeps one deterministic token across prose and CSV rows.</span>
+          </div>
+        </div>
+
+        <div class="mosaic-tile mosaic-tile--2x2" data-reveal style="--stagger:210ms">
+          <div class="mosaic-macro" data-ui="macro-count">
+            <span class="mosaic-macro-num">0 KB</span>
+          </div>
+          <div class="mosaic-tile__caption">
+            <strong>Zero telemetry</strong>
+            <span>No server or API calls.</span>
+          </div>
+        </div>
+
+        <figure class="mosaic-tile mosaic-tile--5x3" data-reveal style="--stagger:280ms">
+          <div class="mosaic-tile__media">
+            <img class="plate-media" src="./assets/account-title-stamp-2025-04-22.jpg" width="1920" height="1440" loading="lazy" decoding="async" alt="Accounting category rubber stamps stacked on grid ledger paper">
+          </div>
+          <figcaption class="mosaic-tile__caption">
+            <strong>Batch TSV &amp; CSV ledgers</strong>
+            <span>Select target columns and keep headers intact across multi-row vendor sheets.</span>
+          </figcaption>
+        </figure>
+
+        <figure class="mosaic-tile mosaic-tile--4x3" data-reveal style="--stagger:350ms">
+          <div class="mosaic-tile__media">
+            <img class="plate-media" src="./assets/calligraphy-for-plaque-of-shunsoro-tea-room.jpg" width="1920" height="823" loading="lazy" decoding="async" alt="Edo period sumi ink calligraphy on paper bearing red seal impressions">
+          </div>
+          <figcaption class="mosaic-tile__caption">
+            <strong>Business text normalization</strong>
+            <span>Half-width katakana, wave dashes, and BiDi markers unify cleanly.</span>
+          </figcaption>
+        </figure>
+
+        <div class="mosaic-tile mosaic-tile--3x3" data-reveal style="--stagger:420ms">
+          <div class="mosaic-macro" data-ui="macro-audit">
+            <span class="mosaic-macro-num">JIS Q 27001</span>
+          </div>
+          <div class="mosaic-tile__caption">
+            <strong>ISMS &amp; P-mark logs</strong>
+            <span>Export JSON and Markdown audit records with zero plaintext PII.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 4: PROOF : Verification Ledger -->
+    <section class="section wrap" id="rules" aria-labelledby="heading-rules">
+      <div class="rules-layout">
+        <div class="rules-lead" data-reveal>
+          <h2 id="heading-rules">Nine verified rules</h2>
+          <p>Shared identically between this browser workbench, the Manifest V3 Chrome extension, and our Node test suite.</p>
+        </div>
+
+        <ul class="rules-list">
+          <li class="rules-row" data-reveal style="--stagger:60ms">
+            <h3 class="rules-row__name">NTA Modulo-9</h3>
+            <p class="rules-row__desc">13-digit Corporate Numbers and T+13 Qualified Invoice IDs across full-width, half-width, and hyphenated formats.</p>
+          </li>
+          <li class="rules-row" data-reveal style="--stagger:110ms">
+            <h3 class="rules-row__name">MIC Modulo-11</h3>
+            <p class="rules-row__desc">12-digit Japanese MyNumber verification including remainder 0 and 1 check-digit edge cases.</p>
+          </li>
+          <li class="rules-row" data-reveal style="--stagger:160ms">
+            <h3 class="rules-row__name">Luhn Payment Cards</h3>
+            <p class="rules-row__desc">14- to 19-digit payment card check-digit verification rejecting repeated uniform digits.</p>
+          </li>
+          <li class="rules-row" data-reveal style="--stagger:210ms">
+            <h3 class="rules-row__name">Japanese Bank Accounts</h3>
+            <p class="rules-row__desc">Matches 普通, 当座, 貯蓄, and 定期 seven-digit account notations with full-width tolerance.</p>
+          </li>
+          <li class="rules-row" data-reveal style="--stagger:260ms">
+            <h3 class="rules-row__name">Domestic &amp; +81 Contact</h3>
+            <p class="rules-row__desc">Detects 10- and 11-digit Japanese phone lines, international +81 numbers, 〒 postal codes, and emails.</p>
+          </li>
+          <li class="rules-row" data-reveal style="--stagger:310ms">
+            <h3 class="rules-row__name">Prompt-Injection Screen</h3>
+            <p class="rules-row__desc">Scores 8 English and Japanese instruction-override rules, role delimiters, Base64 blobs, and zero-width BiDi traps.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- SECTION 5: CHROME EXTENSION (Manifest V3 v1.0.0) -->
+    <section class="section wrap" id="extension" aria-labelledby="heading-extension">
+      <div class="ext-split">
+        <div class="ext-copy" data-reveal>
+          <div>
+            <h2 id="heading-extension">Run inside Chrome</h2>
+            <p style="margin-top:1.25rem;">
+              Install the Manifest V3 extension to scrub prompts directly inside ChatGPT, Claude, and Gemini using the exact same local engine.
+            </p>
+          </div>
+
+          <ol class="ext-steps">
+            <li>Download <code>kurogate-chrome-extension-v1.0.0.zip</code> from GitHub Releases and unzip locally.</li>
+            <li>Open <code>chrome://extensions</code> and enable Developer mode.</li>
+            <li>Click Load unpacked and select the extracted <code>extension/</code> folder.</li>
+            <li>Use the corner 黒門 controls on supported LLM tabs to redact prompts and restore replies.</li>
+          </ol>
+
+          <div class="hero__actions">
+            <a class="btn" href="https://github.com/pecopeko/kurogate/releases/download/v1.0.0/kurogate-chrome-extension-v1.0.0.zip">Download Extension v1.0.0</a>
+            <a class="text-link" href="https://github.com/pecopeko/kurogate" target="_blank" rel="noopener noreferrer">Inspect MIT source</a>
+          </div>
+        </div>
+
+        <div class="ext-media" data-reveal style="--stagger:90ms">
+          <div class="ext-video-box">
+            <video autoplay muted loop playsinline preload="metadata" poster="./assets/olivetti-dora-portable-typewriter-poster.jpg" width="854" height="480" aria-hidden="true">
+              <source src="./assets/olivetti-dora-portable-typewriter.webm" type="video/webm">
+            </video>
+          </div>
+
+          <div data-ui="extension-fragment" class="ext-popup-preview">
+            <div>
+              <strong style="display:block;font-size:15px;">Manifest V3 Permissions</strong>
+              <div class="ext-popup-row"><span>Permissions</span><span>storage, activeTab</span></div>
+              <div class="ext-popup-row"><span>External hosts</span><span>None (0 domains)</span></div>
+              <div class="ext-popup-row"><span>Supported tabs</span><span>ChatGPT · Claude · Gemini</span></div>
+            </div>
+            <div>
+              <strong style="display:block;font-size:15px;">Engine Parity</strong>
+              <div class="ext-popup-row"><span>Shared module</span><span>kurogate-engine.mjs</span></div>
+              <div class="ext-popup-row"><span>Automated tests</span><span>10 / 10 passing</span></div>
+              <div class="ext-popup-row"><span>License</span><span>MIT (Free forever)</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 6: CTA : One word is the button -->
+    <section class="section" aria-labelledby="heading-cta">
+      <a class="cta-band" href="https://github.com/pecopeko/kurogate/releases/download/v1.0.0/kurogate-chrome-extension-v1.0.0.zip">
+        <div class="cta-band__top">
+          <p>Download KUROGATE v1.0.0 for Chrome (Manifest V3, MIT license, zero telemetry).</p>
+          <svg class="cta-band__arrow" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+            <path d="M12 36L36 12M36 12H16M36 12V32" stroke="currentColor" stroke-width="4" stroke-linecap="square" />
+          </svg>
+        </div>
+        <h2 id="heading-cta" class="cta-band__verb">INSTALL</h2>
+      </a>
+    </section>
+  </main>
+
+  <!-- SECTION 7: FOOTER : The mark, built large -->
+  <footer class="site-footer">
+    <div class="wrap">
+      <!-- Block-cut redaction bars spelling KUROGATE -->
+      <svg class="footer-mark" viewBox="0 0 960 220" role="img" aria-label="KUROGATE block redaction wordmark">
+        <g fill="currentColor">
+          <rect x="0" y="20" width="112" height="200" />
+          <rect x="121" y="45" width="112" height="175" />
+          <rect x="242" y="10" width="112" height="210" />
+          <rect x="363" y="34" width="112" height="186" />
+          <rect x="484" y="0" width="112" height="220" />
+          <rect x="605" y="40" width="112" height="180" />
+          <rect x="726" y="18" width="112" height="202" />
+          <rect x="847" y="52" width="113" height="168" />
+        </g>
+        <g fill="#7d0c14" font-family="Libre Franklin, sans-serif" font-weight="700" font-size="92" text-anchor="middle">
+          <text x="56" y="156">K</text>
+          <text x="177" y="164">U</text>
+          <text x="298" y="152">R</text>
+          <text x="419" y="162">O</text>
+          <text x="540" y="148">G</text>
+          <text x="661" y="162">A</text>
+          <text x="782" y="154">T</text>
+          <text x="903" y="168">E</text>
+        </g>
+      </svg>
+
+      <div class="footer-grid">
+        <div class="footer-col">
+          <h3>Product</h3>
+          <a href="#workbench">Live workbench</a>
+          <a href="#pipeline">Verification pipeline</a>
+          <a href="#features">Japanese features</a>
+        </div>
+        <div class="footer-col">
+          <h3>Standards</h3>
+          <a href="#rules">NTA Modulo-9</a>
+          <a href="#rules">MIC Modulo-11</a>
+          <a href="#rules">ISMS Audit Export</a>
+        </div>
+        <div class="footer-col">
+          <h3>Distribution</h3>
+          <a href="https://github.com/pecopeko/kurogate" target="_blank" rel="noopener noreferrer">GitHub Repository</a>
+          <a href="https://github.com/pecopeko/kurogate/releases/tag/v1.0.0" target="_blank" rel="noopener noreferrer">Release v1.0.0</a>
+          <a href="https://github.com/pecopeko/kurogate/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
+        </div>
+        <div class="footer-col">
+          <h3>Architecture</h3>
+          <a href="./core/kurogate-engine.mjs">ES Module Engine</a>
+          <a href="#extension">Chrome MV3 Unpacked</a>
+        </div>
+        <div class="footer-col footer-col--wide">
+          <h3>Privacy Guarantee</h3>
+          <p>100% browser-local execution. Zero telemetry, zero external runtime APIs, and local-only storage.</p>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <p>© 2026 KUROGATE（黒門）· MIT License · Pure browser-local execution</p>
+        <a class="btn btn-inverse" href="#workbench">Back to workbench</a>
+      </div>
+
+      <p class="credits">
+        Pictures and footage:
+        <a href="https://commons.wikimedia.org/wiki/File:Account_title_stamp_2025-04-22.jpg">“Account title stamp 2025-04-22”</a> by Asanagi, <a href="https://creativecommons.org/publicdomain/zero/1.0/deed.en">CC0</a>, via Wikimedia Commons;
+        <a href="https://commons.wikimedia.org/wiki/File:Sealing_stamp_2025-04-08.jpg">“Sealing stamp 2025-04-08”</a> by Asanagi, <a href="https://creativecommons.org/publicdomain/zero/1.0/deed.en">CC0</a>, via Wikimedia Commons;
+        <a href="https://commons.wikimedia.org/wiki/File:Date_stamp_2025-04-17.jpg">“Date stamp 2025-04-17”</a> by Asanagi, <a href="https://creativecommons.org/publicdomain/zero/1.0/deed.en">CC0</a>, via Wikimedia Commons;
+        <a href="https://commons.wikimedia.org/wiki/File:Express_mail_stamp_in_Japan_2025-05-27.jpg">“Express mail stamp in Japan 2025-05-27”</a> by Asanagi, <a href="https://creativecommons.org/publicdomain/zero/1.0/deed.en">CC0</a>, via Wikimedia Commons;
+        <a href="https://commons.wikimedia.org/wiki/File:Calligraphy_for_Plaque_of_Shunsoro_Tea_Room,_by_Prince-priest_Sonsho,_Edo_period,_1700s_AD,_ink_on_paper_-_Tokyo_National_Museum_-_Tokyo,_Japan_-_DSC09516.jpg">“Calligraphy for Plaque of Shunsoro Tea Room, by Prince-priest Sonsho, Edo period, 1700s AD”</a> by Daderot, <a href="https://creativecommons.org/publicdomain/mark/1.0/">public domain</a>, via Wikimedia Commons;
+        <a href="https://commons.wikimedia.org/wiki/File:Olivetti_Dora_portable_typewriter.webm">“Olivetti Dora portable typewriter”</a> by Erik Pålsson, <a href="https://creativecommons.org/licenses/by/3.0">CC BY 3.0</a>, via Wikimedia Commons.
+      </p>
+    </div>
+  </footer>
+
+  <script type="module" src="./app.mjs"></script>
+</body>
+</html>

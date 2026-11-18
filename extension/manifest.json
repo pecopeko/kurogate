@@ -1,0 +1,50 @@
+{
+  "manifest_version": 3,
+  "name": "KUROGATE（黒門）— Local Japanese LLM Privacy Gateway",
+  "short_name": "KUROGATE",
+  "version": "1.0.0",
+  "description": "100% browser-local Japanese PII check-digit redactor, custom dictionary masker & reversible vault for ChatGPT, Claude, and Gemini. Zero network telemetry.",
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "KUROGATE（黒門）Local PII Redactor",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "core/kurogate-engine.mjs"
+      ],
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*"
+      ]
+    }
+  ]
+}

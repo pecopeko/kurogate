@@ -22,9 +22,14 @@
       <button type="button" id="restorePageBtn" class="kg-btn kg-btn-ghost">ページ復元</button>
     </section>
 
+    <label class="kg-toggle-row">
+      <input type="checkbox" id="pasteGuardToggle" checked>
+      <span>ペースト時自動警告（PII・APIキー貼り付けをローカル検知）</span>
+    </label>
+
     <label class="kg-field">
       <span>入力テキスト / LLM応答</span>
-      <textarea id="inputText" rows="5" placeholder="請求書番号（T+13桁）、法人番号、マイナンバー、口座、社内固有名詞を入力…"></textarea>
+      <textarea id="inputText" rows="5" placeholder="請求書番号（T+13桁）、法人番号、マイナンバー、口座、APIキー、社内固有名詞を入力…"></textarea>
     </label>
 
     <div class="kg-actions">

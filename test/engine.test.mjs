@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   ENTITY_LABELS,
@@ -12,6 +15,7 @@ import {
   normalizeJpBusinessText,
   assessInjectionRisk,
   createVaultSession,
+  restoreVaultSession,
   redact,
   restore,
   detectDelimiter,
@@ -21,6 +25,11 @@ import {
   restoreDelimited,
   buildAuditReport,
 } from "../docs/core/kurogate-engine.mjs";
+import {
+  parseDistilledModelManifest,
+  softmaxLogits,
+  fuseRuleAndNeuralScore,
+} from "../docs/core/neural-guard-loader.mjs";
 
 function makeCorporate(body12) {
   return `${computeCorporateCheckDigit(body12)}${body12}`;
@@ -237,4 +246,162 @@ test("ISMS / P-mark audit report omits plaintext PII and attests zero network ca
   assert.ok(audit.markdownString.includes("[INVOICE_ID_1]"));
   assert.ok(Object.keys(ENTITY_LABELS).includes("JP_BANK_ACCOUNT"));
   assert.equal(typeof createVaultSession().vaultMap, "object");
+});
+
+test("Neural guard adapter parses Colab distilled config.json and fuses scores safely", () => {
+  const manifest = parseDistilledModelManifest({
+    architectures: ["DebertaV2ForSequenceClassification"],
+    id2label: {
+      "0": "safe_business",
+      "1": "contextual_pii_leak",
+      "2": "prompt_injection",
+    },
+  });
+  assert.equal(manifest.numLabels, 3);
+  assert.deepEqual(manifest.labels, ["safe_business", "contextual_pii_leak", "prompt_injection"]);
+  assert.equal(manifest.onnxRelativePath, "onnx/model_quantized.onnx");
+
+  const probs = softmaxLogits([-1.5, 2.2, -0.8]);
+  const sum = probs.reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(sum - 1.0) < 1e-6);
+
+  const fused = fuseRuleAndNeuralScore({
+    ruleRiskScore: 0.1,
+    neuralProbs: probs,
+    labels: manifest.labels,
+    safeLabel: "safe_business",
+  });
+  assert.equal(fused.predictedLabel, "contextual_pii_leak");
+  assert.ok(fused.neuralRisk > 0.85);
+  assert.ok(fused.combinedRisk >= 0.55);
+});
+
+test("restoreVaultSession preserves counters and reuses placeholders across multi-pass redactions", () => {
+  const corp1 = makeCorporate("100020003000");
+  const pass1 = redact(`担当: alice@example.com / 法人番号: ${corp1}`);
+  assert.equal(pass1.redactedText, "担当: [EMAIL_1] / 法人番号: [CORPORATE_ID_1]");
+  assert.equal(pass1.vaultMap["[EMAIL_1]"], "alice@example.com");
+
+  // Simulate reloading persisted vaultMap from chrome.storage.local in a 2nd turn
+  const session2 = restoreVaultSession(pass1.vaultMap);
+  const pass2 = redact("CC: bob@example.com へ転送してください。", { vaultSession: session2 });
+  assert.equal(pass2.redactedText, "CC: [EMAIL_2] へ転送してください。");
+  assert.equal(pass2.vaultMap["[EMAIL_1]"], "alice@example.com");
+  assert.equal(pass2.vaultMap["[EMAIL_2]"], "bob@example.com");
+  assert.equal(pass2.vaultMap["[CORPORATE_ID_1]"], corp1);
+
+  // 3rd turn re-mentions alice@example.com and adds carol@example.com
+  const session3 = restoreVaultSession(pass2.vaultMap);
+  const pass3 = redact("再確認: alice@example.com と carol@example.com", { vaultSession: session3 });
+  assert.equal(pass3.redactedText, "再確認: [EMAIL_1] と [EMAIL_3]");
+  assert.equal(pass3.vaultMap["[EMAIL_1]"], "alice@example.com");
+  assert.equal(pass3.vaultMap["[EMAIL_2]"], "bob@example.com");
+  assert.equal(pass3.vaultMap["[EMAIL_3]"], "carol@example.com");
+
+  // Sparse persisted indices never collide
+  const sparseSession = restoreVaultSession({
+    "[EMAIL_4]": "delta@example.com",
+    "[JP_BANK_ACCOUNT_3]": "普通 1234567",
+  });
+  const sparseRes = redact("delta@example.com / echo@example.com / 普通 1234567 / 当座 7654321", {
+    vaultSession: sparseSession,
+  });
+  assert.equal(sparseRes.redactedText, "[EMAIL_4] / [EMAIL_5] / [JP_BANK_ACCOUNT_3] / [JP_BANK_ACCOUNT_4]");
+  assert.equal(
+    restore("宛先: [EMAIL_1], [EMAIL_2], [EMAIL_3]", pass3.vaultMap),
+    "宛先: alice@example.com, bob@example.com, carol@example.com"
+  );
+});
+
+test("Developer secrets (AWS, OpenAI/Anthropic, GitHub PAT, Slack, JWT) redact & restore cleanly", () => {
+  // Construct all secret fixtures dynamically so no literal credential strings exist in source
+  const awsKey = "AKIA" + "0000000000000000";
+  const openaiKey = "sk-" + "proj-" + "a".repeat(28);
+  const anthropicKey = "sk-" + "ant-api03-" + "b".repeat(28);
+  const ghClassic = "ghp_" + "9".repeat(36);
+  const ghFineGrained = "github_" + "pat_" + "a".repeat(22) + "_" + "b".repeat(48);
+  const slackBot = "xoxb-" + "1234567890" + "-" + "1234567890" + "-" + "c".repeat(24);
+  const slackUser = "xoxp-" + "9876543210" + "-" + "1122334455" + "-" + "d".repeat(24);
+  const jwtToken = "eyJhbGciOiJIUzI1NiJ9" + "." + "eyJzdWIiOiIxMjM0NTY3ODkwIn0" + "." + "e".repeat(32);
+
+  const rawText = [
+    `AWS=${awsKey}`,
+    `OPENAI=${openaiKey}`,
+    `ANTHROPIC=${anthropicKey}`,
+    `GH_CLASSIC=${ghClassic}`,
+    `GH_FG=${ghFineGrained}`,
+    `SLACK_BOT=${slackBot}`,
+    `SLACK_USER=${slackUser}`,
+    `JWT=${jwtToken}`,
+  ].join("\n");
+
+  const res = redact(rawText);
+  assert.equal(res.findings.length, 8);
+  assert.deepEqual(
+    res.findings.map((f) => f.kind),
+    [
+      "API_KEY",
+      "API_KEY",
+      "API_KEY",
+      "SECRET_TOKEN",
+      "SECRET_TOKEN",
+      "SECRET_TOKEN",
+      "SECRET_TOKEN",
+      "SECRET_TOKEN",
+    ]
+  );
+
+  assert.ok(res.redactedText.includes("[API_KEY_1]"));
+  assert.ok(res.redactedText.includes("[API_KEY_2]"));
+  assert.ok(res.redactedText.includes("[API_KEY_3]"));
+  assert.ok(res.redactedText.includes("[SECRET_TOKEN_1]"));
+  assert.ok(res.redactedText.includes("[SECRET_TOKEN_5]"));
+
+  // Exact round-trip restore
+  assert.equal(restore(res.redactedText, res.vaultMap), rawText);
+
+  // Audit report never leaks plaintext secrets
+  const audit = buildAuditReport(res, { timestamp: "2026-11-19T15:00:00.000Z" });
+  for (const secret of [awsKey, openaiKey, anthropicKey, ghClassic, ghFineGrained, slackBot, slackUser, jwtToken]) {
+    assert.ok(!res.redactedText.includes(secret));
+    assert.ok(!audit.jsonString.includes(secret));
+    assert.ok(!audit.markdownString.includes(secret));
+  }
+
+  // Multi-pass persistence with API_KEY / SECRET_TOKEN placeholders
+  const nextSession = restoreVaultSession(res.vaultMap);
+  const awsKey2 = "AKIA" + "1111111111111111";
+  const res2 = redact(`Reuse ${awsKey} and new ${awsKey2}`, { vaultSession: nextSession });
+  assert.equal(res2.redactedText, "Reuse [API_KEY_1] and new [API_KEY_4]");
+  assert.equal(res2.vaultMap["[API_KEY_1]"], awsKey);
+  assert.equal(res2.vaultMap["[API_KEY_4]"], awsKey2);
+
+  // Short benign strings are not falsely flagged
+  const benign = redact("labels: sk-123 / AKIA99 / ghp_short / xoxb-12 / eyJ12.abc");
+  assert.equal(benign.findings.length, 0);
+  assert.ok(Object.keys(ENTITY_LABELS).includes("API_KEY"));
+  assert.ok(Object.keys(ENTITY_LABELS).includes("SECRET_TOKEN"));
+});
+
+test("Extension engine stays synced with docs engine and manifest covers all 6 LLM hosts", () => {
+  const testDir = path.dirname(fileURLToPath(import.meta.url));
+  const rootDir = path.resolve(testDir, "..");
+  const docsEngine = fs.readFileSync(path.join(rootDir, "docs/core/kurogate-engine.mjs"), "utf8");
+  const extEngine = fs.readFileSync(path.join(rootDir, "extension/core/kurogate-engine.mjs"), "utf8");
+  assert.equal(extEngine, docsEngine);
+
+  const manifest = JSON.parse(fs.readFileSync(path.join(rootDir, "extension/manifest.json"), "utf8"));
+  assert.equal(manifest.manifest_version, 3);
+  assert.ok(manifest.description.length <= 132);
+  const expectedMatches = [
+    "https://chatgpt.com/*",
+    "https://claude.ai/*",
+    "https://gemini.google.com/*",
+    "https://copilot.microsoft.com/*",
+    "https://www.perplexity.ai/*",
+    "https://notebooklm.google.com/*",
+  ];
+  assert.deepEqual(manifest.content_scripts[0].matches, expectedMatches);
+  assert.deepEqual(manifest.web_accessible_resources[0].matches, expectedMatches);
+  assert.ok(manifest.browser_specific_settings?.gecko?.id);
 });

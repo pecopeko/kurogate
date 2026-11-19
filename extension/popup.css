@@ -118,3 +118,17 @@ textarea {
   cursor: pointer;
   font-weight: 600;
 }
+
+.kg-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.kg-toggle-row input {
+  margin: 0;
+  accent-color: var(--ink);
+}

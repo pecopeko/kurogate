@@ -6,6 +6,8 @@
  */
 
 export const ENTITY_LABELS = Object.freeze({
+  API_KEY: "APIキー (AWS / OpenAI / Anthropic)",
+  SECRET_TOKEN: "認証トークン (GitHub / Slack / JWT)",
   INVOICE_ID: "適格請求書登録番号 (NTA Mod-9)",
   CORPORATE_ID: "法人番号 (NTA Mod-9)",
   MYNUMBER: "マイナンバー (MIC Mod-11)",
@@ -44,6 +46,14 @@ const SCAN_REPLACE_RE = /[０-９Ａ-Ｚａ-ｚ－−‐‒–—―＠．＿＋
 const ZERO_WIDTH_RE = /[\u200b\u200c\u200d\ufeff\u2060]/g;
 const BIDI_OVERRIDE_RE = /[\u202a-\u202e\u2066-\u2069]/g;
 const DASH_BETWEEN_DIGITS_RE = /(?<=\d)[\u2212\u2010\u2011\u2012\u2013\u2014\u2015](?=\d)/g;
+
+const AWS_ACCESS_KEY_RE = /(?<![A-Za-z0-9])(?:AKIA|ASIA)[0-9A-Z]{16}(?![A-Za-z0-9])/g;
+const PROVIDER_API_KEY_RE =
+  /(?<![A-Za-z0-9_-])sk-(?:(?:proj|ant|live|test|svcacct|admin)-[A-Za-z0-9_-]{16,}|[A-Za-z0-9]{20,})(?![A-Za-z0-9_-])/g;
+const GITHUB_PAT_RE =
+  /(?<![A-Za-z0-9_])(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9]{10,}_[A-Za-z0-9]{20,})(?![A-Za-z0-9_])/g;
+const SLACK_TOKEN_RE = /(?<![A-Za-z0-9_-])xox[bp]-[A-Za-z0-9-]{16,}(?![A-Za-z0-9_-])/g;
+const JWT_RE = /(?<![A-Za-z0-9_.-])eyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{8,}(?![A-Za-z0-9_.-])/g;
 
 const INVOICE_RE = /(?<![A-Za-z0-9])[Tt][ \t]*-?[ \t]*(\d(?:[ \t-]?\d){12})(?![A-Za-z0-9]|[ \t-]\d)/g;
 const CORP_RE = /(?<!\d[ \t-])(?<![A-Za-z0-9])(\d(?:[ \t-]?\d){12})(?![A-Za-z0-9]|[ \t-]\d)/g;
@@ -278,11 +288,27 @@ function collectCandidates(scanText, options = {}) {
   const isEnabled = (kind) => !enabled || enabled.has(kind);
   const rawHits = [];
 
+  if (isEnabled("API_KEY")) {
+    for (const re of [AWS_ACCESS_KEY_RE, PROVIDER_API_KEY_RE]) {
+      for (const m of scanText.matchAll(re)) {
+        rawHits.push({ priority: 1, start: m.index, end: m.index + m[0].length, kind: "API_KEY", verified: false });
+      }
+    }
+  }
+
+  if (isEnabled("SECRET_TOKEN")) {
+    for (const re of [GITHUB_PAT_RE, SLACK_TOKEN_RE, JWT_RE]) {
+      for (const m of scanText.matchAll(re)) {
+        rawHits.push({ priority: 2, start: m.index, end: m.index + m[0].length, kind: "SECRET_TOKEN", verified: false });
+      }
+    }
+  }
+
   if (isEnabled("INVOICE_ID")) {
     for (const m of scanText.matchAll(INVOICE_RE)) {
       const digits = m[1].replace(/[ \t-]/g, "");
       if (isValidCorporateNumber(digits)) {
-        rawHits.push({ priority: 1, start: m.index, end: m.index + m[0].length, kind: "INVOICE_ID", verified: true });
+        rawHits.push({ priority: 3, start: m.index, end: m.index + m[0].length, kind: "INVOICE_ID", verified: true });
       }
     }
   }
@@ -291,7 +317,7 @@ function collectCandidates(scanText, options = {}) {
     for (const m of scanText.matchAll(CORP_RE)) {
       const digits = m[1].replace(/[ \t-]/g, "");
       if (isValidCorporateNumber(digits)) {
-        rawHits.push({ priority: 2, start: m.index, end: m.index + m[0].length, kind: "CORPORATE_ID", verified: true });
+        rawHits.push({ priority: 4, start: m.index, end: m.index + m[0].length, kind: "CORPORATE_ID", verified: true });
       }
     }
   }
@@ -300,7 +326,7 @@ function collectCandidates(scanText, options = {}) {
     for (const m of scanText.matchAll(MYNUMBER_RE)) {
       const digits = m[1].replace(/[ \t-]/g, "");
       if (isValidMyNumber(digits)) {
-        rawHits.push({ priority: 3, start: m.index, end: m.index + m[0].length, kind: "MYNUMBER", verified: true });
+        rawHits.push({ priority: 5, start: m.index, end: m.index + m[0].length, kind: "MYNUMBER", verified: true });
       }
     }
   }
@@ -309,14 +335,14 @@ function collectCandidates(scanText, options = {}) {
     for (const m of scanText.matchAll(CARD_RE)) {
       const digits = m[1].replace(/[ \t-]/g, "");
       if (digits.length >= 14 && isValidLuhn(digits)) {
-        rawHits.push({ priority: 4, start: m.index, end: m.index + m[0].length, kind: "CREDIT_CARD", verified: true });
+        rawHits.push({ priority: 6, start: m.index, end: m.index + m[0].length, kind: "CREDIT_CARD", verified: true });
       }
     }
   }
 
   if (isEnabled("JP_BANK_ACCOUNT")) {
     for (const m of scanText.matchAll(BANK_ACCOUNT_RE)) {
-      rawHits.push({ priority: 5, start: m.index, end: m.index + m[0].length, kind: "JP_BANK_ACCOUNT", verified: false });
+      rawHits.push({ priority: 7, start: m.index, end: m.index + m[0].length, kind: "JP_BANK_ACCOUNT", verified: false });
     }
   }
 
@@ -324,7 +350,7 @@ function collectCandidates(scanText, options = {}) {
     for (const m of scanText.matchAll(EMAIL_RE)) {
       const offset = m[0].indexOf(m[1]);
       const start = m.index + offset;
-      rawHits.push({ priority: 6, start, end: start + m[1].length, kind: "EMAIL", verified: false });
+      rawHits.push({ priority: 8, start, end: start + m[1].length, kind: "EMAIL", verified: false });
     }
   }
 
@@ -337,7 +363,7 @@ function collectCandidates(scanText, options = {}) {
       const flags = entry.caseSensitive ? "g" : "gi";
       const re = new RegExp(pattern, flags);
       for (const m of scanText.matchAll(re)) {
-        rawHits.push({ priority: 7, start: m.index, end: m.index + m[0].length, kind: "CUSTOM_TERM", verified: false });
+        rawHits.push({ priority: 9, start: m.index, end: m.index + m[0].length, kind: "CUSTOM_TERM", verified: false });
       }
     }
   }
@@ -350,7 +376,7 @@ function collectCandidates(scanText, options = {}) {
       if (isIntlJp || isDomesticJp) {
         const offset = m[0].indexOf(m[1]);
         const start = m.index + offset;
-        rawHits.push({ priority: 8, start, end: start + m[1].length, kind: "JP_PHONE", verified: false });
+        rawHits.push({ priority: 10, start, end: start + m[1].length, kind: "JP_PHONE", verified: false });
       }
     }
   }
@@ -360,7 +386,7 @@ function collectCandidates(scanText, options = {}) {
       const captured = m[1] || m[2];
       const offset = m[0].indexOf(captured);
       const start = m.index + offset;
-      rawHits.push({ priority: 9, start, end: start + captured.length, kind: "JP_POSTAL", verified: false });
+      rawHits.push({ priority: 11, start, end: start + captured.length, kind: "JP_POSTAL", verified: false });
     }
   }
 
@@ -385,6 +411,53 @@ export function createVaultSession() {
     rawToPlaceholder: new Map(),
     vaultMap: Object.create(null),
   };
+}
+
+const PLACEHOLDER_TOKEN_RE = /^\[([A-Z0-9_]+)_(\d+)\]$/;
+
+/**
+ * Rebuild a reusable Vault session from a persisted placeholder->raw map so
+ * repeated redactions never re-issue existing placeholder indices or overwrite
+ * previous entries, and re-occurring raw values reuse the same placeholder.
+ * @param {Record<string, string>} [existingVaultMap]
+ * @returns {{ counters: Record<string, number>, rawToPlaceholder: Map<string, string>, vaultMap: Record<string, string> }}
+ */
+export function restoreVaultSession(existingVaultMap) {
+  const session = createVaultSession();
+  if (!existingVaultMap || typeof existingVaultMap !== "object") {
+    return session;
+  }
+
+  const parsedEntries = [];
+  for (const [placeholder, original] of Object.entries(existingVaultMap)) {
+    if (typeof placeholder !== "string" || !placeholder || typeof original !== "string") {
+      continue;
+    }
+    session.vaultMap[placeholder] = original;
+    const match = PLACEHOLDER_TOKEN_RE.exec(placeholder);
+    if (match) {
+      parsedEntries.push({
+        placeholder,
+        original,
+        kind: match[1],
+        index: Number.parseInt(match[2], 10),
+      });
+    }
+  }
+
+  parsedEntries.sort((a, b) => a.index - b.index || a.placeholder.localeCompare(b.placeholder));
+
+  for (const entry of parsedEntries) {
+    if (Number.isFinite(entry.index) && entry.index > (session.counters[entry.kind] || 0)) {
+      session.counters[entry.kind] = entry.index;
+    }
+    const cacheKey = `${entry.kind}::${entry.original}`;
+    if (!session.rawToPlaceholder.has(cacheKey)) {
+      session.rawToPlaceholder.set(cacheKey, entry.placeholder);
+    }
+  }
+
+  return session;
 }
 
 /**
